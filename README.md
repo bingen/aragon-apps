@@ -15,6 +15,7 @@ This repository contains the following apps:
 - **[Group](apps/group)**: Give a set of entities a shared entity that has its own permissions.
 - **[Voting](apps/voting)**: Create votes that execute actions on behalf of token holders.
 - **[Token Manager](apps/token-manager)**: Manages organization tokens.
+- **[Payroll](apps/payroll)**: Manages employees' payrolls.
 
 You can read more about the individual apps in [their specifications](https://wiki.aragon.one/dev/apps/) on the Aragon Wiki.
 
