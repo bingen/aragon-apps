@@ -5,18 +5,12 @@ const getBalance = require('@aragon/test-helpers/balance')(web3);
 const namehash = require('eth-ens-namehash').hash
 const keccak256 = require('js-sha3').keccak_256
 
-const ENS = artifacts.require('@aragon/os/contracts/lib/ens/ENS')
-const Repo = artifacts.require('Repo')
-const APMRegistry = artifacts.require('APMRegistry')
-const PublicResolver = artifacts.require('PublicResolver')
 const FIFSResolvingRegistrar = artifacts.require('@aragon/id/contracts/FIFSResolvingRegistrar')
-const EVMScriptRegistryFactory = artifacts.require('@aragon/os/contracts/factory/EVMScriptRegistryFactory')
-const Kernel = artifacts.require('Kernel')
-//const APP_BASE_NAMESPACE = '0x'+keccak256('base')
-const ACL = artifacts.require('ACL')
-const MiniMeTokenFactory = artifacts.require('@aragon/os/contracts/lib/minime/MiniMeTokenFactory')
-const MiniMeToken = artifacts.require('@aragon/os/contracts/lib/minime/MiniMeToken')
-const EtherToken = artifacts.require('@aragon/os/contracts/common/EtherToken.sol')
+//const Kernel = artifacts.require('Kernel')
+//const ACL = artifacts.require('ACL')
+//const MiniMeTokenFactory = artifacts.require('@aragon/os/contracts/lib/minime/MiniMeTokenFactory')
+//const MiniMeToken = artifacts.require('@aragon/os/contracts/lib/minime/MiniMeToken')
+//const EtherToken = artifacts.require('@aragon/os/contracts/common/EtherToken.sol')
 
 const { encodeCallScript, EMPTY_SCRIPT } = require('@aragon/test-helpers/evmScript')
 const ExecutionTarget = artifacts.require('ExecutionTarget')
@@ -66,89 +60,53 @@ contract('Beta Base Template', accounts => {
 
         ensFactory = await getContract('ENSFactory').new()
 
-        const regFact = await EVMScriptRegistryFactory.new()
+        const regFact = await getContract('EVMScriptRegistryFactory').new()
         const regFactAddress = regFact.address
-        //const regFactAddress = '0x0'
-        console.log("Registry Factory: " + regFactAddress)
 
         const kernelBase = await getContract('Kernel').new()
         const aclBase = await getContract('ACL').new()
-        daoFactory = await getContract('DAOFactory').new(kernelBase.address, aclBase.address, regFact.address)
-        //apmFactory = await getContract('APMRegistryFactory').new(daoFactory.address, ...baseAddrs, '0x0', ensFactory.address)
-        //ens = ENS.at(await apmFactory.ens())
-        console.log("1, creating ENS")
-        //ens = await ENS.new({ from: ensOwner })
+        daoFactory = await getContract('DAOFactory').new(kernelBase.address, aclBase.address, regFactAddress)
+        // TODO: For some reason APM fails if created from a DAO Factory with EVM Script Registry Factory (so we create another one here without it):
+        const daoFactoryNoReg = await getContract('DAOFactory').new(kernelBase.address, aclBase.address, '0x0')
         const receiptEns = await ensFactory.newENS(ensOwner)
-        ens = ENS.at(getEnsDeployResult(receiptEns))
-        console.log("2, ENS address: " + ens.address)
-        apmFactory = await getContract('APMRegistryFactory').new(daoFactory.address, ...baseAddrs, ens.address, '0x0')
-        //console.log(await getBalance(accounts[0]))
+        ens = getContract('ENS').at(getEnsDeployResult(receiptEns))
+
+        apmFactory = await getContract('APMRegistryFactory').new(daoFactoryNoReg.address, ...baseAddrs, ens.address, '0x0')
         ens.setSubnodeOwner(namehash('eth'), '0x'+keccak256('aragonpm'), apmFactory.address, { from: ensOwner })
-        console.log("3, APM Factory address: " + apmFactory.address)
-        //console.log(await getBalance(accounts[0]))
+
+        etherToken = await getContract('EtherToken').new()
+        minimeFac = await getContract('MiniMeTokenFactory').new()
+        const publicResolver = getContract('PublicResolver').at(await ens.resolver(namehash('resolver.eth')))
+        aragonId = await getContract('FIFSResolvingRegistrar').new(ens.address, publicResolver.address, namehash('aragonid.eth'))
+        await ens.setSubnodeOwner(namehash('eth'), '0x'+keccak256('aragonid'), aragonId.address, { from: ensOwner })
+        await aragonId.register('0x'+keccak256('owner'), ensOwner)
 
         const receiptApm = await apmFactory.newAPM(namehash('eth'), '0x'+keccak256('aragonpm'), apmOwner)
-        console.log("4")
         const apmAddr = getApmDeployResult(receiptApm)
-        console.log("5, APM address: " + apmAddr)
-        registry = APMRegistry.at(apmAddr)
-        console.log("6, creating Repos")
+        registry = getContract('APMRegistry').at(apmAddr)
 
         await newRepo(registry, 'voting', repoDev, 'Voting', apmOwner)
         await newRepo(registry, 'finance', repoDev, 'Finance', apmOwner)
         await newRepo(registry, 'token-manager', repoDev, 'TokenManager', apmOwner)
         await newRepo(registry, 'vault', repoDev, 'Vault', apmOwner)
-
-        etherToken = await EtherToken.new()
-        minimeFac = await MiniMeTokenFactory.new()
-        //aragonId = await ens.owner(namehash('aragonid.eth'))
-        const publicResolver = PublicResolver.at(await ens.resolver(namehash('resolver.eth')))
-        console.log('deploying AragonID')
-        aragonId = await FIFSResolvingRegistrar.new(ens.address, publicResolver.address, namehash('aragonid.eth'))
-        console.log('assigning ENS name to AragonID: ' + aragonId.address)
-        await ens.setSubnodeOwner(namehash('eth'), '0x'+keccak256('aragonid'), aragonId.address, { from: ensOwner })
-        console.log('assigning owner name')
-        await aragonId.register('0x'+keccak256('owner'), ensOwner)
-        console.log('before section done')
-        //console.log(await getBalance(accounts[0]))
     //})
 
     //beforeEach(async () => {
         // create Democracy Template
         template = await DemocracyTemplate.new(daoFactory.address, minimeFac.address, registry.address, etherToken.address, aragonId.address, appIds)
-        console.log(template.logs)
         const holders = [holder19, holder31, holder50]
         const stakes = [19*10**18, 31*10**18, 50*10**18]
         // create Token
         const receiptToken = await template.newToken('DemocracyToken', 'DTT')
         tokenAddress = getEventResult(receiptToken, 'DeployToken', 'token')
-        console.log("Token: " + tokenAddress)
         // create Instance
         const receiptInstance = await template.newInstance('DemocracyDao', holders, stakes, neededSupport, minimumAcceptanceQuorum, votingTime)
         //console.log(receiptInstance.logs)
         daoAddress = getEventResult(receiptInstance, 'DeployInstance', 'dao')
-        console.log("DAO Address: " + daoAddress)
-        dao = Kernel.at(daoAddress)
+        dao = getContract('Kernel').at(daoAddress)
         // generated Voting app
-        /*
-        const appSetId = web3.sha3(APP_BASE_NAMESPACE + appIds[3].substring(2), { encoding: 'hex' })
-        console.log("Dao Voting app: " + await dao.getApp(appSetId))
-         */
-        //voting = Voting.at(await dao.getApp(appSetId))
-        console.log("Voting app id: " + appIds[3])
         const votingProxyAddress = getAppProxy(receiptInstance, appIds[3])
-        console.log("Voting proxy address: " + votingProxyAddress)
         voting = Voting.at(votingProxyAddress)
-        /*
-        const proxy = AppProxyUpgradeable.at(votingProxyAddress)
-        //console.log(proxy)
-        console.log("Proxy kernel: " + await proxy.kernel())
-        console.log("Proxy code: " + await proxy.getCode())
-         */
-        //console.log(voting)
-        //console.log("support: " + await voting.supportRequiredPct())
-        //console.log("quorum: " + await voting.minAcceptQuorumPct())
-        //console.log("Vote time: " + await voting.voteTime())
     })
 
     it('creates and initializes a DAO with its Token', async() => {
@@ -172,21 +130,11 @@ contract('Beta Base Template', accounts => {
             //console.log(executionTarget)
             const action = { to: executionTarget.address, calldata: executionTarget.contract.execute.getData() }
             script = encodeCallScript([action, action])
-            /*
-            console.log("Before create vote:")
-            console.log(await getBalance(accounts[0]))
-            console.log("support: " + await voting.supportRequiredPct())
-            console.log("quorum: " + await voting.minAcceptQuorumPct())
-            console.log("Vote time: " + await voting.voteTime())
-             */
             voteId = createdVoteId(await voting.newVote(script, 'metadata', { from: nonHolder }))
-            //console.log("Vote Id: " + voteId)
-            //console.log(await getBalance(accounts[0]))
         })
 
         it('has correct state', async() => {
             const [isOpen, isExecuted, creator, startDate, snapshotBlock, minQuorum, y, n, totalVoters, execScript] = await voting.getVote(voteId)
-            //console.log([isOpen, isExecuted, creator, startDate, snapshotBlock, minQuorum, y, n, totalVoters, execScript])
 
             assert.isTrue(isOpen, 'vote should be open')
             assert.isFalse(isExecuted, 'vote should be executed')
@@ -231,26 +179,10 @@ contract('Beta Base Template', accounts => {
         })
 
         it('can execute if vote is approved with support and quorum', async () => {
-            console.log("Execution Target: " + executionTarget.address)
             await voting.vote(voteId, true, true, { from: holder31 })
             await voting.vote(voteId, false, true, { from: holder19 })
-            //let [isOpen, isExecuted, creator, startDate, snapshotBlock, minQuorum, y, n, totalVoters, execScript] = await voting.getVote(voteId)
-            //console.log([isOpen, isExecuted, creator, startDate, snapshotBlock, minQuorum, y, n, totalVoters, execScript])
-            //console.log("Time: " + (await voting.getTime()).toString())
             await timeTravel(votingTime + 1)
-            /**/
-            await voting.getTime2()
-            console.log("+ Voting Time: " + votingTime)
-            console.log("Time: " + (await voting.getTime()).toString())
-            const [isOpen, isExecuted, creator, startDate, snapshotBlock, minQuorum, y, n, totalVoters, execScript] = await voting.getVote(voteId)
-            //console.log([isOpen, isExecuted, creator, startDate, snapshotBlock, minQuorum, y, n, totalVoters, execScript])
-            /**/
-            console.log("Can execute?: " + await voting.canExecute(voteId))
-            console.log("Counter: " + await executionTarget.counter())
             await voting.executeVote(voteId)
-            console.log('Executed')
-            console.log("Counter: " + await executionTarget.counter())
-            console.log(await executionTarget.counter())
             assert.equal(await executionTarget.counter(), 2, 'should have executed result')
         })
 
