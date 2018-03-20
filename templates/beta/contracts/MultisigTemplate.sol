@@ -27,7 +27,7 @@ contract MultisigTemplate is BetaTemplateBase {
         cacheToken(token, msg.sender);
     }
 
-    function newInstance(string name, address[] signers, uint256 neededSignatures) external {
+    function initInstance(address[] signers, uint256 neededSignatures) external {
         uint256[] memory stakes = new uint256[](signers.length);
 
         for (uint256 i = 0; i < signers.length; i++) {
@@ -35,8 +35,8 @@ contract MultisigTemplate is BetaTemplateBase {
         }
 
         MiniMeToken token = popTokenCache(msg.sender);
-        Voting voting = createDAO(
-            name,
+        Voting voting = initializeTokenRelated(
+            msg.sender,
             token,
             signers,
             stakes,

@@ -22,7 +22,6 @@ const getAppProxy = (receipt, id) => receipt.logs.filter(l => l.event == 'Instal
 
 contract('Beta Base Template', accounts => {
     const ETH = '0x0'
-    let daoAddress, tokenAddress
     let owner = process.env.OWNER //'0x1f7402f55e142820ea3812106d0657103fc1709e'
     const holder19 = accounts[6]
     const holder31 = accounts[7]
@@ -50,17 +49,22 @@ contract('Beta Base Template', accounts => {
         before(async () => {
             // create Democracy Template
             template = await getTemplate(indexObj, 'DemocracyTemplate')
-            const holders = [holder19, holder31, holder50]
-            const stakes = [19e18, 31e18, 50e18]
             // create Token
             const receiptToken = await template.newToken('DemocracyToken', 'DTT', { from: owner })
             tokenAddress = getEventResult(receiptToken, 'DeployToken', 'token')
-            // create Instance
-            receiptInstance = await template.newInstance('DemocracyDao', holders, stakes, neededSupport, minimumAcceptanceQuorum, votingTime, { from: owner })
+            receiptInstance = await template.createDAO('DemocracyDao')
+            //console.log("Status: " + receiptInstance.receipt.status)
+            //console.log("Gas used: " + receiptInstance.receipt.gasUsed)
             daoAddress = getEventResult(receiptInstance, 'DeployInstance', 'dao')
             // generated Voting app
             const votingProxyAddress = getAppProxy(receiptInstance, appIds[3])
             voting = Voting.at(votingProxyAddress)
+            // init Instance
+            const holders = [holder19, holder31, holder50]
+            const stakes = [19e18, 31e18, 50e18]
+            const r = await template.initInstance(holders, stakes, neededSupport, minimumAcceptanceQuorum, votingTime, { from: owner })
+            //console.log("Status: " + r.receipt.status)
+            //console.log("Gas used: " + r.receipt.gasUsed)
         })
 
         context('Creating a DAO and votes', () => {
@@ -71,7 +75,9 @@ contract('Beta Base Template', accounts => {
                 // create Token
                 await template.newToken('BadDemocracyToken', 'DTT')
                 // create Instance
-                let fail = await template.newInstance('BadDemocracyDao', holders, stakes, neededSupport, minimumAcceptanceQuorum, votingTime)
+                await template.createDAO('BadDemocracyDao')
+                // init Instance
+                let fail = await template.initInstance(holders, stakes, neededSupport, minimumAcceptanceQuorum, votingTime)
                 assert(fail.receipt.status, 0, "It should have thrown")
             })
 
@@ -224,13 +230,17 @@ contract('Beta Base Template', accounts => {
             // create Token
             const receiptToken = await template.newToken('MultisigToken', 'MTT')
             tokenAddress = getEventResult(receiptToken, 'DeployToken', 'token')
-            // create Instance
-            receiptInstance = await template.newInstance('MultisigDao', signers, neededSignatures)
+            // Create Instance
+            const betaTemplateBase = getContract('BetaTemplateBase').at(template.address)
+            receiptInstance = await template.createDAO('MultisigDao')
+            //console.log(receiptInstance.receipt.status)
+            //console.log(receiptInstance.receipt.gasUsed)
             daoAddress = getEventResult(receiptInstance, 'DeployInstance', 'dao')
-            dao = getContract('Kernel').at(daoAddress)
             // generated Voting app
             const votingProxyAddress = getAppProxy(receiptInstance, appIds[3])
             voting = Voting.at(votingProxyAddress)
+            // init Instance
+            await template.initInstance(signers, neededSignatures)
         })
 
         context('Creating a DAO and signing', () => {

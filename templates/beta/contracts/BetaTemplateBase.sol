@@ -20,6 +20,7 @@ contract BetaTemplateBase {
     MiniMeTokenFactory public minimeFac;
     IFIFSResolvingRegistrar public aragonID;
     bytes32[4] public appIds;
+    mapping (address => address[4]) appAddressesCache;
 
     mapping (address => address) tokenCache;
 
@@ -27,7 +28,7 @@ contract BetaTemplateBase {
     enum Apps { Finance, TokenManager, Vault, Voting }
 
     event DeployToken(address token, address indexed cacheOwner);
-    event DeployInstance(address dao, address indexed token);
+    event DeployInstance(address dao);
     event InstalledApp(address appProxy, bytes32 appId);
 
     address constant ANY_ENTITY = address(-1);
@@ -48,32 +49,28 @@ contract BetaTemplateBase {
         appIds = _appIds;
     }
 
-    function createDAO(
-        string name,
-        MiniMeToken token,
-        address[] holders,
-        uint256[] stakes,
-        uint256 _maxTokens
-    )
-        internal
-        returns (Voting)
-    {
+    function createDAO(string name) public {
         Kernel dao = fac.newDAO(this);
 
         ACL acl = ACL(dao.acl());
 
         acl.createPermission(this, dao, dao.APP_MANAGER_ROLE(), this);
 
+        address[4] memory appAddresses;
         Voting voting = Voting(dao.newAppInstance(appIds[uint8(Apps.Voting)], latestVersionAppBase(appIds[uint8(Apps.Voting)])));
+        appAddresses[uint8(Apps.Voting)] = address(voting);
         InstalledApp(voting, appIds[uint8(Apps.Voting)]);
         Vault vault = Vault(dao.newAppInstance(appIds[uint8(Apps.Vault)], latestVersionAppBase(appIds[uint8(Apps.Vault)])));
+        appAddresses[uint8(Apps.Vault)] = address(vault);
         InstalledApp(vault, appIds[uint8(Apps.Vault)]);
         Finance finance = Finance(dao.newAppInstance(appIds[uint8(Apps.Finance)], latestVersionAppBase(appIds[uint8(Apps.Finance)])));
+        appAddresses[uint8(Apps.Finance)] = address(finance);
         InstalledApp(finance, appIds[uint8(Apps.Finance)]);
         TokenManager tokenManager = TokenManager(dao.newAppInstance(appIds[uint8(Apps.TokenManager)], latestVersionAppBase(appIds[uint8(Apps.TokenManager)])));
+        appAddresses[uint8(Apps.TokenManager)] = address(tokenManager);
         InstalledApp(tokenManager, appIds[uint8(Apps.TokenManager)]);
 
-        token.changeController(tokenManager); // sender has to create tokens
+        cacheAppAddresses(appAddresses, msg.sender);
 
         // permissions
         acl.createPermission(ANY_ENTITY, voting, voting.CREATE_VOTES_ROLE(), voting);
@@ -86,19 +83,11 @@ contract BetaTemplateBase {
         acl.createPermission(voting, tokenManager, tokenManager.ASSIGN_ROLE(), voting);
         acl.createPermission(voting, tokenManager, tokenManager.REVOKE_VESTINGS_ROLE(), voting);
 
-        require(holders.length == stakes.length);
-
         acl.createPermission(this, tokenManager, tokenManager.MINT_ROLE(), this);
-
-        tokenManager.initialize(token, _maxTokens > 1, _maxTokens, true);
-
-        for (uint256 i = 0; i < holders.length; i++) {
-            tokenManager.mint(holders[i], stakes[i]);
-        }
 
         Vault vaultBase = Vault(latestVersionAppBase(appIds[uint8(Apps.Vault)]));
         // inits
-        vault.initialize(vaultBase.erc20ConnectorBase(), vaultBase.ethConnectorBase()); // init with trusted connectors
+        vault.initializeWithBase(vaultBase); // init with trusted connectors
         finance.initialize(IVaultConnector(vault), uint64(-1) - uint64(now)); // yuge period
 
         // clean-up
@@ -111,10 +100,34 @@ contract BetaTemplateBase {
         // no revokes to save gas as factory can't do anything to orgs (clutters acl representation)
 
         registerAragonID(name, dao);
-        DeployInstance(dao, token);
+        DeployInstance(dao);
+    }
+
+    function initializeTokenRelated(
+        address owner,
+        MiniMeToken token,
+        address[] holders,
+        uint256[] stakes,
+        uint256 _maxTokens
+    )
+        internal
+        returns (Voting)
+    {
+        require(holders.length == stakes.length);
+
+        address[4] memory appAddresses = popAppAddressesCache(owner);
+
+        TokenManager tokenManager = TokenManager(appAddresses[uint8(Apps.TokenManager)]);
+
+        token.changeController(tokenManager); // sender has to create tokens
+        tokenManager.initialize(token, _maxTokens > 1, _maxTokens, true);
+
+        for (uint256 i = 0; i < holders.length; i++) {
+            tokenManager.mint(holders[i], stakes[i]);
+        }
 
         // voting is returned so init can happen later
-        return voting;
+        return Voting(appAddresses[uint8(Apps.Voting)]);
     }
 
     function cacheToken(MiniMeToken token, address owner) internal {
@@ -128,6 +141,16 @@ contract BetaTemplateBase {
         delete tokenCache[owner];
 
         return token;
+    }
+
+    function cacheAppAddresses(address[4] appAddresses, address owner) internal {
+        appAddressesCache[owner] = appAddresses;
+    }
+
+    function popAppAddressesCache(address owner) internal returns (address[4] appAddresses) {
+        require(appAddressesCache[owner][uint8(Apps.Voting)] != address(0));
+        appAddresses = appAddressesCache[owner];
+        delete appAddressesCache[owner];
     }
 
     function registerAragonID(string name, address owner) internal {

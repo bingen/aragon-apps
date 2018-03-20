@@ -27,8 +27,7 @@ contract DemocracyTemplate is BetaTemplateBase {
          cacheToken(token, msg.sender);
      }
 
-     function newInstance(
-         string name,
+     function initInstance(
          address[] holders,
          uint256[] tokens,
          uint256 supportNeeded,
@@ -38,8 +37,8 @@ contract DemocracyTemplate is BetaTemplateBase {
          external
      {
          MiniMeToken token = popTokenCache(msg.sender);
-         Voting voting = createDAO(
-             name,
+         Voting voting = initializeTokenRelated(
+             msg.sender,
              token,
              holders,
              tokens,
