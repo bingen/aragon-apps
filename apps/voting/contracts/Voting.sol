@@ -102,7 +102,7 @@ contract Voting is IForwarder, AragonApp {
     */
     function changeSupportRequiredPct(uint64 _supportRequiredPct)
         external
-        authP(MODIFY_SUPPORT_ROLE, arr(uint256(_supportRequiredPct), uint256(supportRequiredPct)))
+        auth(MODIFY_SUPPORT_ROLE)
     {
         require(minAcceptQuorumPct <= _supportRequiredPct, ERROR_CHANGE_SUPPORT_PCTS);
         require(_supportRequiredPct < PCT_BASE, ERROR_CHANGE_SUPPORT_TOO_BIG);
@@ -117,7 +117,7 @@ contract Voting is IForwarder, AragonApp {
     */
     function changeMinAcceptQuorumPct(uint64 _minAcceptQuorumPct)
         external
-        authP(MODIFY_QUORUM_ROLE, arr(uint256(_minAcceptQuorumPct), uint256(minAcceptQuorumPct)))
+        auth(MODIFY_QUORUM_ROLE)
     {
         require(_minAcceptQuorumPct <= supportRequiredPct, ERROR_CHANGE_QUORUM_PCTS);
         minAcceptQuorumPct = _minAcceptQuorumPct;
@@ -191,7 +191,7 @@ contract Voting is IForwarder, AragonApp {
 
     function canForward(address _sender, bytes) public view returns (bool) {
         // Note that `canPerform()` implicitly does an initialization check itself
-        return canPerform(_sender, CREATE_VOTES_ROLE, arr());
+        return canPerform(_sender, CREATE_VOTES_ROLE);
     }
 
     function canVote(uint256 _voteId, address _voter) public view voteExists(_voteId) returns (bool) {

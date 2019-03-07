@@ -218,7 +218,7 @@ contract Finance is EtherTokenConstant, IsContract, AragonApp {
         string _reference
     )
         external
-        authP(CREATE_PAYMENTS_ROLE, arr(_token, _receiver, _amount, _interval, _maxRepeats))
+        auth(CREATE_PAYMENTS_ROLE)
         transitionsPeriod
         returns (uint256 paymentId)
     {
@@ -263,7 +263,7 @@ contract Finance is EtherTokenConstant, IsContract, AragonApp {
     */
     function setPeriodDuration(uint64 _periodDuration)
         external
-        authP(CHANGE_PERIOD_ROLE, arr(uint256(_periodDuration), uint256(settings.periodDuration)))
+        auth(CHANGE_PERIOD_ROLE)
         transitionsPeriod
     {
         require(_periodDuration >= 1 days, ERROR_SET_PERIOD_TOO_SHORT);
@@ -281,7 +281,7 @@ contract Finance is EtherTokenConstant, IsContract, AragonApp {
         uint256 _amount
     )
         external
-        authP(CHANGE_BUDGETS_ROLE, arr(_token, _amount, settings.budgets[_token], settings.hasBudget[_token] ? 1 : 0))
+        auth(CHANGE_BUDGETS_ROLE)
         transitionsPeriod
     {
         settings.budgets[_token] = _amount;
@@ -297,7 +297,7 @@ contract Finance is EtherTokenConstant, IsContract, AragonApp {
     */
     function removeBudget(address _token)
         external
-        authP(CHANGE_BUDGETS_ROLE, arr(_token, uint256(0), settings.budgets[_token], settings.hasBudget[_token] ? 1 : 0))
+        auth(CHANGE_BUDGETS_ROLE)
         transitionsPeriod
     {
         settings.budgets[_token] = 0;
@@ -312,7 +312,7 @@ contract Finance is EtherTokenConstant, IsContract, AragonApp {
     */
     function executePayment(uint256 _paymentId)
         external
-        authP(EXECUTE_PAYMENTS_ROLE, arr(_paymentId, payments[_paymentId].amount))
+        auth(EXECUTE_PAYMENTS_ROLE)
         paymentExists(_paymentId)
         transitionsPeriod
     {
@@ -344,7 +344,7 @@ contract Finance is EtherTokenConstant, IsContract, AragonApp {
     */
     function setPaymentStatus(uint256 _paymentId, bool _active)
         external
-        authP(MANAGE_PAYMENTS_ROLE, arr(_paymentId, uint256(_active ? 1 : 0)))
+        auth(MANAGE_PAYMENTS_ROLE)
         paymentExists(_paymentId)
     {
         payments[_paymentId].inactive = !_active;

@@ -57,7 +57,7 @@ contract Vault is EtherTokenConstant, AragonApp, DepositableStorage {
     /* solium-disable-next-line function-order */
     function transfer(address _token, address _to, uint256 _value)
         external
-        authP(TRANSFER_ROLE, arr(_token, _to, _value))
+        auth(TRANSFER_ROLE)
     {
         require(_value > 0, ERROR_TRANSFER_VALUE_ZERO);
 
